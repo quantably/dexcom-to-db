@@ -1,1 +1,203 @@
-[{"id":"9dd9a6bf.202f98","type":"tab","label":"Dexcom pull (EU)","disabled":false,"info":""},{"id":"99c1b906.63a098","type":"function","z":"9dd9a6bf.202f98","name":"Create login request","func":"msg.headers = {}\nmsg.method = \"POST\"\nmsg.url = \"https://shareous1.dexcom.com/ShareWebServices/Services/General/LoginPublisherAccountByName\" ;\n\nmsg.headers = { 'User-Agent': 'application/json',\n                'Content-Type': 'application/json', \n                'Accept': 'application/json' };\n\nmsg.payload = {\n    \"password\": msg.password,\n    \"applicationId\" : \"d89443d2-327c-4a6f-89e5-496bbb0317db\",\n    \"accountName\": msg.accountName\n}; \n\nreturn msg; ","outputs":1,"noerr":0,"initialize":"","finalize":"","x":460,"y":100,"wires":[["a2573baf.e88b7"]]},{"id":"a2573baf.e88b7","type":"http request","z":"9dd9a6bf.202f98","name":"","method":"use","ret":"obj","paytoqs":"ignore","url":"","tls":"","persist":false,"proxy":"","authType":"","x":670,"y":100,"wires":[["f2766a84.71a08"]]},{"id":"17675240.e10dbe","type":"inject","z":"9dd9a6bf.202f98","name":"","props":[{"p":"payload"},{"p":"topic","vt":"str"}],"repeat":"150","crontab":"","once":false,"onceDelay":0.1,"topic":"","payload":"","payloadType":"date","x":150,"y":180,"wires":[["be79876a.13fae8"]]},{"id":"f2766a84.71a08","type":"change","z":"9dd9a6bf.202f98","name":"","rules":[{"t":"set","p":"session_id","pt":"msg","to":"payload","tot":"msg"}],"action":"","property":"","from":"","to":"","reg":false,"x":750,"y":180,"wires":[["52b89f19.218068"]]},{"id":"902050b2.f53a28","type":"debug","z":"9dd9a6bf.202f98","name":"","active":true,"tosidebar":true,"console":false,"tostatus":false,"complete":"payload","targetType":"msg","statusVal":"","statusType":"auto","x":1550,"y":220,"wires":[]},{"id":"52b89f19.218068","type":"function","z":"9dd9a6bf.202f98","name":"Fetch glucose","func":"msg.headers = {}\nmsg.method = \"POST\"\nmsg.url = \"https://shareous1.dexcom.com/ShareWebServices/Services/Publisher/ReadPublisherLatestGlucoseValues?sessionId=\" + msg.session_id + \"&minutes=1440&maxCount=20\";\n\nmsg.headers = { 'Content-Type': 'application/json', \n                'Content-Length': 0,\n                'Accept': 'application/json' };\n\nreturn msg; ","outputs":1,"noerr":0,"initialize":"","finalize":"","x":860,"y":260,"wires":[["310de1a2.9768ce"]]},{"id":"310de1a2.9768ce","type":"http request","z":"9dd9a6bf.202f98","name":"","method":"use","ret":"obj","paytoqs":"ignore","url":"","tls":"","persist":false,"proxy":"","authType":"","x":970,"y":340,"wires":[["94409564.8fabc"]]},{"id":"325ff690.6e8482","type":"function","z":"9dd9a6bf.202f98","name":"upsert into mysql","func":"const SQL = global.get('sqlModule'); \n\nvar incoming = msg.payload; \nvar query = SQL`\n  REPLACE\n  INTO glucose\n  (date, value, direction)\n  VALUES  (${incoming[\"formattedDate\"]}, ${incoming[\"sgv\"]}, ${incoming[\"direction\"]})`; \nreturn {\"payload\": query.values, \"topic\": query.sql};\n","outputs":1,"noerr":0,"initialize":"","finalize":"","x":1210,"y":280,"wires":[["5f3569e4.a02c18"]]},{"id":"94409564.8fabc","type":"function","z":"9dd9a6bf.202f98","name":"Clean glucose data","func":"var DIRECTIONS = {\n  NONE: 0\n, DoubleUp: 1\n, SingleUp: 2\n, FortyFiveUp: 3\n, Flat: 4\n, FortyFiveDown: 5\n, SingleDown: 6\n, DoubleDown: 7\n, 'NOT COMPUTABLE': 8\n, 'RATE OUT OF RANGE': 9\n};\n\nvar Trends = (function ( ) {\n  var keys = Object.keys(DIRECTIONS);\n  var trends = keys.sort(function (a, b) {\n    return DIRECTIONS[a] - DIRECTIONS[b];\n  });\n  return trends;\n})( );\n\nfunction trendToDirection (trend) {\n  return Trends[trend] || Trends[0];\n}\n\nvar incoming = msg.payload; \n\nfor (let i = 0; i < incoming.length; i++) {\n    var d = incoming[i];\n    var regex = /\\((.*)\\)/;\n    var wall = parseInt(d.WT.match(regex)[1]);\n    var date = new Date(wall);\n    var entry = {\n        sgv: d.Value/18\n        , date: wall\n        , dateString: date.toISOString()\n        , formattedDate: date.getFullYear() + \"-\" + (date.getMonth() + 1) + \"-\" + date.getDate() + \" \" + date.getHours() + \":\" + date.getMinutes() + \":\" + date.getSeconds() \n        , trend: d.Trend\n        , direction: trendToDirection(d.Trend)\n    };\n    newmsg = {};\n    newmsg.payload = entry; \n    node.send(newmsg);\n}\n\n","outputs":1,"noerr":0,"initialize":"","finalize":"","x":1090,"y":420,"wires":[["325ff690.6e8482"]]},{"id":"be79876a.13fae8","type":"credentials","z":"9dd9a6bf.202f98","name":"","props":[{"value":"accountName","type":"msg"},{"value":"password","type":"msg"}],"x":270,"y":100,"wires":[["99c1b906.63a098"]]},{"id":"5f3569e4.a02c18","type":"mysql","z":"9dd9a6bf.202f98","mydb":"f7f4fcc3.2ac4f","name":"","x":1320,"y":180,"wires":[["902050b2.f53a28"]]},{"id":"f7f4fcc3.2ac4f","type":"MySQLdatabase","name":"","host":"127.0.0.1","port":"3306","db":"diabetes","tz":"","charset":"UTF8"}]
+[
+  {
+    "id": "9dd9a6bf.202f98",
+    "type": "tab",
+    "label": "Dexcom pull (EU)",
+    "disabled": false,
+    "info": ""
+  },
+  {
+    "id": "99c1b906.63a098",
+    "type": "function",
+    "z": "9dd9a6bf.202f98",
+    "name": "Create login request",
+    "func": "msg.headers = {}\nmsg.method = \"POST\"\nmsg.url = \"https://shareous1.dexcom.com/ShareWebServices/Services/General/LoginPublisherAccountByName\" ;\n\nmsg.headers = { 'User-Agent': 'application/json',\n                'Content-Type': 'application/json', \n                'Accept': 'application/json' };\n\nmsg.payload = {\n    \"password\": msg.password,\n    \"applicationId\" : \"d89443d2-327c-4a6f-89e5-496bbb0317db\",\n    \"accountName\": msg.accountName\n}; \n\nreturn msg; ",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "x": 460,
+    "y": 100,
+    "wires": [["a2573baf.e88b7"]]
+  },
+  {
+    "id": "a2573baf.e88b7",
+    "type": "http request",
+    "z": "9dd9a6bf.202f98",
+    "name": "",
+    "method": "use",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "authType": "",
+    "x": 670,
+    "y": 100,
+    "wires": [["f2766a84.71a08"]]
+  },
+  {
+    "id": "17675240.e10dbe",
+    "type": "inject",
+    "z": "9dd9a6bf.202f98",
+    "name": "",
+    "props": [
+      {
+        "p": "payload"
+      },
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "150",
+    "crontab": "",
+    "once": false,
+    "onceDelay": 0.1,
+    "topic": "",
+    "payload": "",
+    "payloadType": "date",
+    "x": 150,
+    "y": 180,
+    "wires": [["be79876a.13fae8"]]
+  },
+  {
+    "id": "f2766a84.71a08",
+    "type": "change",
+    "z": "9dd9a6bf.202f98",
+    "name": "",
+    "rules": [
+      {
+        "t": "set",
+        "p": "session_id",
+        "pt": "msg",
+        "to": "payload",
+        "tot": "msg"
+      }
+    ],
+    "action": "",
+    "property": "",
+    "from": "",
+    "to": "",
+    "reg": false,
+    "x": 750,
+    "y": 180,
+    "wires": [["52b89f19.218068"]]
+  },
+  {
+    "id": "902050b2.f53a28",
+    "type": "debug",
+    "z": "9dd9a6bf.202f98",
+    "name": "",
+    "active": true,
+    "tosidebar": true,
+    "console": false,
+    "tostatus": false,
+    "complete": "payload",
+    "targetType": "msg",
+    "statusVal": "",
+    "statusType": "auto",
+    "x": 1550,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "52b89f19.218068",
+    "type": "function",
+    "z": "9dd9a6bf.202f98",
+    "name": "Fetch glucose",
+    "func": "msg.headers = {}\nmsg.method = \"POST\"\nmsg.url = \"https://shareous1.dexcom.com/ShareWebServices/Services/Publisher/ReadPublisherLatestGlucoseValues?sessionId=\" + msg.session_id + \"&minutes=1440&maxCount=20\";\n\nmsg.headers = { 'Content-Type': 'application/json', \n                'Content-Length': 0,\n                'Accept': 'application/json' };\n\nreturn msg; ",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "x": 860,
+    "y": 260,
+    "wires": [["310de1a2.9768ce"]]
+  },
+  {
+    "id": "310de1a2.9768ce",
+    "type": "http request",
+    "z": "9dd9a6bf.202f98",
+    "name": "",
+    "method": "use",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "",
+    "tls": "",
+    "persist": false,
+    "proxy": "",
+    "authType": "",
+    "x": 970,
+    "y": 340,
+    "wires": [["94409564.8fabc"]]
+  },
+  {
+    "id": "325ff690.6e8482",
+    "type": "function",
+    "z": "9dd9a6bf.202f98",
+    "name": "upsert into mysql",
+    "func": "const SQL = global.get('sqlModule'); \n\nvar incoming = msg.payload; \nvar query = SQL`\n  REPLACE\n  INTO glucose\n  (date, value, direction)\n  VALUES  (${incoming[\"formattedDate\"]}, ${incoming[\"sgv\"]}, ${incoming[\"direction\"]})`; \nreturn {\"payload\": query.values, \"topic\": query.sql};\n",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "x": 1210,
+    "y": 280,
+    "wires": [["5f3569e4.a02c18"]]
+  },
+  {
+    "id": "94409564.8fabc",
+    "type": "function",
+    "z": "9dd9a6bf.202f98",
+    "name": "Clean glucose data",
+    "func": "var DIRECTIONS = {\n  NONE: 0\n, DoubleUp: 1\n, SingleUp: 2\n, FortyFiveUp: 3\n, Flat: 4\n, FortyFiveDown: 5\n, SingleDown: 6\n, DoubleDown: 7\n, 'NOT COMPUTABLE': 8\n, 'RATE OUT OF RANGE': 9\n};\n\nvar Trends = (function ( ) {\n  var keys = Object.keys(DIRECTIONS);\n  var trends = keys.sort(function (a, b) {\n    return DIRECTIONS[a] - DIRECTIONS[b];\n  });\n  return trends;\n})( );\n\nfunction trendToDirection (trend) {\n  return Trends[trend] || Trends[0];\n}\n\nvar incoming = msg.payload; \n\nfor (let i = 0; i < incoming.length; i++) {\n    var d = incoming[i];\n    var regex = /\\((.*)\\)/;\n    var wall = parseInt(d.WT.match(regex)[1]);\n    var date = new Date(wall);\n    var entry = {\n        sgv: d.Value/18\n        , date: wall\n        , dateString: date.toISOString()\n        , formattedDate: date.getFullYear() + \"-\" + (date.getMonth() + 1) + \"-\" + date.getDate() + \" \" + date.getHours() + \":\" + date.getMinutes() + \":\" + date.getSeconds() \n        , trend: d.Trend\n        , direction: trendToDirection(d.Trend)\n    };\n    newmsg = {};\n    newmsg.payload = entry; \n    node.send(newmsg);\n}\n\n",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "x": 1090,
+    "y": 420,
+    "wires": [["325ff690.6e8482"]]
+  },
+  {
+    "id": "be79876a.13fae8",
+    "type": "credentials",
+    "z": "9dd9a6bf.202f98",
+    "name": "",
+    "props": [
+      {
+        "value": "accountName",
+        "type": "msg"
+      },
+      {
+        "value": "password",
+        "type": "msg"
+      }
+    ],
+    "x": 270,
+    "y": 100,
+    "wires": [["99c1b906.63a098"]]
+  },
+  {
+    "id": "5f3569e4.a02c18",
+    "type": "mysql",
+    "z": "9dd9a6bf.202f98",
+    "mydb": "f7f4fcc3.2ac4f",
+    "name": "",
+    "x": 1320,
+    "y": 180,
+    "wires": [["902050b2.f53a28"]]
+  },
+  {
+    "id": "f7f4fcc3.2ac4f",
+    "type": "MySQLdatabase",
+    "name": "",
+    "host": "127.0.0.1",
+    "port": "3306",
+    "db": "diabetes",
+    "tz": "",
+    "charset": "UTF8"
+  }
+]
